@@ -22,15 +22,13 @@ var backend_initialized: bool = false;
 
 pub const Window = struct {
     pub const Context = struct {
-        state: Window.State = .dead,
         inputs: std.ArrayList(input.Event),
     };
 
     context: Context,
     window: *glfw.GLFWwindow = undefined,
+    is_open: bool = false,
     allocator: *std.mem.Allocator,
-
-    pub const State = enum { dead, menu, game, editor, paused };
 
     pub fn init(allocator: *std.mem.Allocator) !Window {
         if (!backend_initialized) return Error.BackendUninitialized;
@@ -39,8 +37,8 @@ pub const Window = struct {
         app.window = try create_window(.opengl);
         errdefer glfw.glfwDestroyWindow(app.window);
 
-        app.context.state = .dead;
         app.context.inputs = std.ArrayList(input.Event).init(allocator);
+        app.is_open = true;
         return app;
     }
 
@@ -51,12 +49,11 @@ pub const Window = struct {
         _ = glfw.glfwSetCursorPosCallback(self.window, _cursor_pos_callback);
         glfw.glfwMakeContextCurrent(self.window);
         glfw.glfwSwapInterval(1);
-        self.context.state = .menu;
     }
 
     pub fn begin(self: *Window) !void {
         if (glfw.glfwWindowShouldClose(self.window) != 0) {
-            self.context.state = .dead;
+            self.is_open = false;
             return;
         }
         glfw.glfwPollEvents();
@@ -65,6 +62,7 @@ pub const Window = struct {
     pub fn end(self: *Window) !void {
         glfw.glfwSwapBuffers(self.window);
         self.context.inputs.clearRetainingCapacity();
+        if (!self.is_open) glfw.glfwSetWindowShouldClose(self.window, 1);
     }
 
     pub fn deinit(self: *Window) void {
@@ -91,6 +89,7 @@ pub fn init() !void {
 
     backend_initialized = true;
 }
+
 pub fn deinit() void {
     glfw.glfwTerminate();
     backend_initialized = false;

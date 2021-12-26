@@ -1,10 +1,8 @@
-//! zng: batch.zig
+//! zen: queue.zig
 //! batched rendering implementation
 
 const std = @import("std");
-
-usingnamespace @import("./vertex.zig");
-const c = @import("../c.zig");
+const gl = @import("gl");
 
 /// creates a vertex batcher. initializes a vao, ebo, and a vbo with attributes
 /// for vertex struct members.
@@ -12,22 +10,33 @@ pub fn Batcher(comptime T: type) type {
     return struct {
         const Self = @This();
 
-        _vao: u32,
-        _vbo: u32,
-        _ebo: u32,
+        vao: u32,
+        vbo: u32,
+        ebo: u32,
 
-        vertex_buf_size: u32,
-        index_buf_size: u32,
+        vertices: []T,
+        indices: []c_uint,
 
-        pub fn init(allocator: *std.mem.Allocator, vertex_buf_size: u32) !Batcher(T) {
-            var batcher: Batcher(T) = undefined;
+        voffs: usize = 0,
+        eoffs: usize = 0,
 
-            c.glGenVertexArrays(1, &batcher._vao);
-            c.glGenBuffers(1, &batcher._vbo);
-            c.glGenBuffers(1, &batcher._ebo);
+        allocator: *std.mem.Allocator,
 
-            c.glBindVertexArray(batcher._vao);
-            c.glBindBuffer(c.GL_ARRAY_BUFFER, batcher._vbo);
+        pub fn init(allocator: *std.mem.Allocator, vertex_buf_size: usize) !Self {
+            var self: Self = undefined;
+
+            self.vertices = try allocator.alloc(T, vertex_buf_size);
+            errdefer allocator.free(self.vertices);
+
+            self.indices = try allocator.alloc(c_uint, vertex_buf_size * 3);
+            errdefer allocator.free(self.indices);
+
+            gl.glGenVertexArrays(1, &self.vao);
+            gl.glGenBuffers(1, &self.vbo);
+            gl.glGenBuffers(1, &self.ebo);
+
+            gl.glBindVertexArray(self.vao);
+            gl.glBindBuffer(gl.GL_ARRAY_BUFFER, self.vbo);
 
             const vertex_fields = @typeInfo(T).Struct.fields;
             inline for (vertex_fields) |field, index| {
@@ -35,79 +44,63 @@ pub fn Batcher(comptime T: type) type {
 
                 // TODO: add more types? or just add as needed
                 const gl_type = switch (field_info.child) {
-                    u8 => c.GL_UNSIGNED_BYTE,
-                    f32 => c.GL_FLOAT,
-                    else => {
-                        @compileError("Unsupported vertex type.");
-                    },
+                    u8 => gl.GL_UNSIGNED_BYTE,
+                    f32 => gl.GL_FLOAT,
+                    else => @compileError("Unsupported vertex type."),
                 };
 
-                c.glEnableVertexAttribArray(index);
-                c.glVertexAttribPointer(
-                    index,
-                    field_info.len,
-                    gl_type,
-                    c.GL_FALSE,
-                    @sizeOf(T),
-                    @intToPtr(?*c_void, @byteOffsetOf(T, field.name)),
-                );
+                gl.glEnableVertexAttribArray(index);
+                gl.glVertexAttribPointer(index, field_info.len, gl_type, gl.GL_FALSE, @sizeOf(T), @intToPtr(*allowzero c_void, @offsetOf(T, field.name)));
             }
 
-            c.glBindBuffer(c.GL_ARRAY_BUFFER, batcher._vbo);
-            c.glBufferData(
-                c.GL_ARRAY_BUFFER,
-                vertex_buf_size * @sizeOf(T),
-                null,
-                c.GL_DYNAMIC_DRAW,
-            );
+            gl.glBindBuffer(gl.GL_ARRAY_BUFFER, self.vbo);
+            gl.glBufferData(gl.GL_ARRAY_BUFFER, vertex_buf_size * @sizeOf(T), null, gl.GL_DYNAMIC_DRAW);
 
-            c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, batcher._ebo);
-            c.glBufferData(
-                c.GL_ELEMENT_ARRAY_BUFFER,
-                3 * vertex_buf_size * @sizeOf(u32),
-                null,
-                c.GL_DYNAMIC_DRAW,
-            );
+            gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, self.ebo);
+            gl.glBufferData(gl.GL_ELEMENT_ARRAY_BUFFER, 3 * vertex_buf_size * @sizeOf(c_uint), null, gl.GL_DYNAMIC_DRAW);
 
-            c.glBindVertexArray(0);
+            gl.glBindVertexArray(0);
 
-            batcher.vertex_buf_size = vertex_buf_size;
-            batcher.index_buf_size = vertex_buf_size * 3;
-
-            return batcher;
+            return self;
         }
 
-        pub inline fn bind(self: Self) void {
-            c.glBindVertexArray(self._vao);
+        pub fn deinit(self: *Self) void {
+            self.allocator.free(self.vertices);
+            self.allocator.free(self.indices);
         }
 
-        pub fn add(self: Self, vertices: []T, indices: []u32, vertex_offset: u32, index_offset: u32) !void {
-            c.glBindBuffer(c.GL_ARRAY_BUFFER, self._vbo);
-            c.glBufferSubData(c.GL_ARRAY_BUFFER, vertex_offset, vertices.len, vertices.ptr);
+        pub inline fn bind(self: *Self) void {
+            gl.glBindVertexArray(self.vao);
+        }
 
-            c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, self._ebo);
-            c.glBufferSubData(c.GL_ELEMENT_ARRAY_BUFFER, index_offset, indices.len, indices.ptr);
+        pub fn add(self: *Self, vertices: []T, indices: []u32) !void {
+            if (self.voffs + vertices.len > self.vertices.len or self.eoffs + indices.len > self.indices.len) {
+                try self.draw();
+            }
+
+            for (vertices) |v, i| self.vertices[self.voffs + i] = v;
+            for (indices) |e, i| self.indices[self.eoffs + i] = e;
+
+            self.voffs += vertices.len;
+            self.eoffs += indices.len;
+        }
+
+        pub fn draw(self: *Self) !void {
+            self.bind();
+            gl.glBindBuffer(gl.GL_ARRAY_BUFFER, self.vbo);
+            gl.glBufferData(gl.GL_ARRAY_BUFFER, self.vertices.len * @sizeOf(T), self.vertices.ptr);
+            gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, self.ebo);
+            gl.glBufferData(gl.GL_ELEMENT_ARRAY_BUFFER, self.indices.len, self.indices.ptr);
         }
     };
 }
 
-pub const GuiBatcher = Batcher(GuiVertex);
-pub const StaticMeshBatcher = Batcher(StaticMeshVertex);
-pub const MeshBatcher = Batcher(MeshVertex);
-
-pub const Drawable = struct {
-    mesh: u32,
-    mesh_type: MeshType,
-    material: ?u32,
-    shader: u32,
-};
-
-//! queued batched rendering procedure:
-//! 1) for everything but gui, determine geometry visible from current view
-//! 2) queue visible geometry
-//! 3) sort queue by texture, shader, vbo, etc.
-//! 4) set uniforms for camera, etc.
-//! 5) split into batches and draw
+// queued batched rendering procedure:
+// 1) for everything but gui, determine geometry visible from current view
+// 2) queue visible geometry
+// 3) sort queue by texture, shader, vbo, etc.
+// 4) set uniforms for camera, etc.
+// 5) split into batches and draw
 
 pub fn RenderQueue(comptime T: type) type {
     return struct {
@@ -115,42 +108,40 @@ pub fn RenderQueue(comptime T: type) type {
 
         queue: []T,
         // batcher: Batcher(...),
-        allocator: *Allocator,
+        allocator: *std.mem.Allocator,
 
-        pub fn init(allocator: *Allocator) RenderQueue(T) {
+        pub fn init(allocator: *std.mem.Allocator) RenderQueue(T) {
             return Self{ .queue = std.ArrayList(T).init(allocator) };
         }
 
-        pub fn deinit(self: Self) void {
-            queue.deinit();
+        pub fn deinit(self: *Self) void {
+            self.queue.deinit();
         }
 
-        pub fn push(self: Self, mesh: T) !void {
-            //
-        }
+        // pub fn push(self: Self, mesh: T) !void {
+        //
+        // }
 
-        pub fn draw(self: Self) !void {
+        pub fn draw(self: *Self) !void {
             // batcher.bind();
             var vertex_offset: u32 = 0;
             var index_offset: u32 = 0;
-            for (queue.items) |mesh| {
-                if (vertex_offset > batcher.buf_len or index_offset > batcher.buf_len * 3) {
-                    // draw and reset
-                    // batcher.draw();
-                    vertex_offset = 0;
-                    index_offset = 0;
-                }
+            for (self.queue.items) |_| {
+                // if (vertex_offset > batcher.buf_len or index_offset > batcher.buf_len * 3) {
+                // draw and reset
+                // batcher.draw();
+                vertex_offset = 0;
+                index_offset = 0;
+                //}
 
                 // add mesh vertices and indices to batch buffer
-                batcher.add(mesh.vertices, mesh.indices, vertex_offset, index_offset);
-                vertex_offset += mesh.vertices.len;
-                index_offset += mesh.vertices.len;
+                // self.batcher.add(mesh.vertices, mesh.indices, vertex_offset, index_offset);
             }
             //  empty the queue
         }
 
-        pub fn clear(self: Self) void {
-            //
+        pub fn clear(self: *Self) void {
+            self.queue.clearRetainingCapacity();
         }
     };
 }

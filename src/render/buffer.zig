@@ -3,61 +3,58 @@
 //! buffer creation should be done after all mesh assets have been loaded so
 //! meshes with the same vertex format can be packed into common buffers.
 
-const c = @import("../c.zig");
+const gl = @import("gl");
 
 pub const GlBuffer = struct {
-    vertex_array: u32,
-    vertex_buffer: u32,
-    index_buffer: u32,
-    transform_buffer: u32,
+    vao: u32,
+    vbo: u32,
+    ebo: u32,
+
+    pub fn init() !GlBuffer {
+        
+    }
 };
 
 pub fn init_buffer(comptime T: type) u32 {
-    var buffer_obj: u32 = undefined;
-    c.glGenBuffers(1, &buffer_obj);
-    c.glBindBuffer(c.GL_ARRAY_BUFFER, buffer_obj);
-
     const vertex_fields = @typeInfo(T).Struct.fields;
     inline for (vertex_fields) |field, index| {
         const field_info = @typeInfo(field.field_type).Array;
 
         // TODO: add more types? or just add as needed
         const gl_type = switch (field_info.child) {
-            u8 => c.GL_UNSIGNED_BYTE,
-            f32 => c.GL_FLOAT,
-            else => {
-                @compileError("Unsupported vertex type.");
-            },
+            u8 => gl.GL_UNSIGNED_BYTE,
+            f32 => gl.GL_FLOAT,
+            else => @compileError("Unsupported vertex type."),
         };
 
-        c.glEnableVertexAttribArray(index);
-        c.glVertexAttribPointer(
+        gl.glEnableVertexAttribArray(index);
+        gl.glVertexAttribPointer(
             index,
             field_info.len,
             gl_type,
-            c.GL_FALSE,
+            gl.GL_FALSE,
             @sizeOf(T),
-            @intToPtr(?*c_void, @byteOffsetOf(T, field.name)),
+            @intToPtr(?*c_void, @offsetOf(T, field.name)),
         );
     }
 
-    c.glBindBuffer(c.GL_ARRAY_BUFFER, batcher._vbo);
-    c.glBufferData(
-        c.GL_ARRAY_BUFFER,
+    gl.glBindBuffer(gl.GL_ARRAY_BUFFER, batcher._vbo);
+    gl.glBufferData(
+        gl.GL_ARRAY_BUFFER,
         vertex_buf_size * @sizeOf(T),
         null,
-        c.GL_DYNAMIC_DRAW,
+        gl.GL_DYNAMIC_DRAW,
     );
 
-    c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, batcher._ebo);
-    c.glBufferData(
-        c.GL_ELEMENT_ARRAY_BUFFER,
+    gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, batcher._ebo);
+    gl.glBufferData(
+        gl.GL_ELEMENT_ARRAY_BUFFER,
         3 * vertex_buf_size * @sizeOf(u32),
         null,
-        c.GL_DYNAMIC_DRAW,
+        gl.GL_DYNAMIC_DRAW,
     );
 
-    c.glBindVertexArray(0);
+    gl.glBindVertexArray(0);
 
     batcher.vertex_buf_size = vertex_buf_size;
     batcher.index_buf_size = vertex_buf_size * 3;
@@ -71,24 +68,24 @@ pub fn gen_buffer_from_data(
 ) u32 {
     const num_verts = @sizeOf(Vertex) * 3 * num_tris;
     var bufs: GlBuffer = undefined;
-    c.glGenVertexArrays(1, &bufs.vao);
-    c.glGenBuffers(1, &bufs.vbo);
-    c.glGenBuffers(1, &bufs.ebo);
+    gl.glGenVertexArrays(1, &bufs.vao);
+    gl.glGenBuffers(1, &bufs.vbo);
+    gl.glGenBuffers(1, &bufs.ebo);
 
-    c.glBindVertexArray(bufs.vao);
-    c.glBindBuffer(c.GL_ARRAY_BUFFER, bufs.vbo);
+    gl.glBindVertexArray(bufs.vao);
+    gl.glBindBuffer(gl.GL_ARRAY_BUFFER, bufs.vbo);
 
-    c.glVertexAttribPointer(0, 3, c.GL_FLOAT, c.GL_FALSE, @sizeOf(Vertex), @intToPtr(?*c_void, @byteOffsetOf(Vertex, "position")));
-    c.glEnableVertexAttribArray(0);
+    gl.glVertexAttribPointer(0, 3, gl.GL_FLOAT, gl.GL_FALSE, @sizeOf(Vertex), @intToPtr(?*c_void, @byteOffsetOf(Vertex, "position")));
+    gl.glEnableVertexAttribArray(0);
 
-    c.glVertexAttribPointer(1, 4, c.GL_FLOAT, c.GL_FALSE, @sizeOf(Vertex), @intToPtr(?*c_void, @byteOffsetOf(Vertex, "color")));
-    c.glEnableVertexAttribArray(1);
+    gl.glVertexAttribPointer(1, 4, gl.GL_FLOAT, gl.GL_FALSE, @sizeOf(Vertex), @intToPtr(?*c_void, @byteOffsetOf(Vertex, "color")));
+    gl.glEnableVertexAttribArray(1);
 
-    c.glBufferData(c.GL_ARRAY_BUFFER, num_verts, @as(*c_void, &vertex_buffer), c.GL_STATIC_DRAW);
+    gl.glBufferData(gl.GL_ARRAY_BUFFER, num_verts, @as(*c_void, &vertex_buffer), gl.GL_STATIC_DRAW);
 
-    c.glBindBuffer(c.GL_ELEMENT_ARRAY_BUFFER, bufs.ebo);
-    c.glBufferData(c.GL_ELEMENT_ARRAY_BUFFER, 3 * num_tris * @sizeOf(u32), null, c.GL_STATIC_DRAW);
-    c.glBindVertexArray(0);
+    gl.glBindBuffer(gl.GL_ELEMENT_ARRAY_BUFFER, bufs.ebo);
+    gl.glBufferData(gl.GL_ELEMENT_ARRAY_BUFFER, 3 * num_tris * @sizeOf(u32), null, gl.GL_STATIC_DRAW);
+    gl.glBindVertexArray(0);
 
     return bufs;
 }

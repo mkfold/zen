@@ -11,9 +11,3 @@ pub fn Mesh(comptime T: type) type {
         indices: []u32,
     };
 }
-
-pub const MeshType = enum {
-    StaticMesh,
-    AnimMesh,
-    GuiMesh,
-};
