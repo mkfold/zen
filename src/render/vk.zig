@@ -29,7 +29,7 @@ fn debug_callback(
     severity: c.VkDebugUtilsMessageSeverityFlagBitsEXT,
     types: c.VkDebugUtilsMessageTypeFlagsEXT,
     callback_data: ?*const c.VkDebugUtilsMessengerCallbackDataEXT,
-    userData: ?*c_void,
+    userData: ?*anyopaque,
 ) callconv(.C) c.VkBool32 {
     switch (@enumToInt(severity)) {
         c.VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT => log.err("{s}", .{callback_data.?.pMessage}),

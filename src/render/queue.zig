@@ -2,7 +2,7 @@
 //! batched rendering implementation
 
 const std = @import("std");
-const gl = @import("gl");
+const gl = @import("../c.zig").gl;
 
 /// creates a vertex batcher. initializes a vao, ebo, and a vbo with attributes
 /// for vertex struct members.
@@ -50,7 +50,7 @@ pub fn Batcher(comptime T: type) type {
                 };
 
                 gl.glEnableVertexAttribArray(index);
-                gl.glVertexAttribPointer(index, field_info.len, gl_type, gl.GL_FALSE, @sizeOf(T), @intToPtr(*allowzero c_void, @offsetOf(T, field.name)));
+                gl.glVertexAttribPointer(index, field_info.len, gl_type, gl.GL_FALSE, @sizeOf(T), @intToPtr(*allowzero anyopaque, @offsetOf(T, field.name)));
             }
 
             gl.glBindBuffer(gl.GL_ARRAY_BUFFER, self.vbo);

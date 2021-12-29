@@ -1,6 +1,9 @@
-const c = @import("glfw");
+//! zen: app/input.zig
+//! TODO(mia): joypad input
 
-pub const Key = enum(i16) {
+const c = @import("../c.zig").glfw;
+
+pub const Key = enum(i32) {
     unknown = c.GLFW_KEY_UNKNOWN,
 
     space = c.GLFW_KEY_SPACE,
@@ -141,16 +144,7 @@ pub const Key = enum(i16) {
     menu = c.GLFW_KEY_MENU,
 };
 
-/// cast GLFW key to Key enum type. probably faster than switching on the GLFW
-/// keys to translate them, but unsafe if key is not in the enum, so if we panic
-/// here that's probably why.
-pub fn cast_glfw_key(key: c_int) Key {
-    return @intToEnum(Key, @intCast(i16, key));
-}
-
-pub const KeyMods = u8;
-
-pub const KeyMod = enum(u8) {
+pub const KeyMod = enum(i32) {
     shift = c.GLFW_MOD_SHIFT,
     control = c.GLFW_MOD_CONTROL,
     alt = c.GLFW_MOD_ALT,
@@ -159,81 +153,36 @@ pub const KeyMod = enum(u8) {
     num_lock = c.GLFW_MOD_NUM_LOCK,
 };
 
-/// cast GLFW key mod to KeyMods type. just hides an easy cast to u8.
-pub fn cast_glfw_mods(mods: c_int) KeyMods {
-    return @intCast(KeyMods, mods);
-}
-
-pub const MouseButton = enum(u8) {
-    left = c.GLFW_MOUSE_BUTTON_LEFT,
-    middle = c.GLFW_MOUSE_BUTTON_MIDDLE,
-    right = c.GLFW_MOUSE_BUTTON_RIGHT,
+pub const MouseButton = enum(i32) {
+    button1 = c.GLFW_MOUSE_BUTTON_1,
+    button2 = c.GLFW_MOUSE_BUTTON_2,
+    button3 = c.GLFW_MOUSE_BUTTON_3,
+    button4 = c.GLFW_MOUSE_BUTTON_4,
+    button5 = c.GLFW_MOUSE_BUTTON_5,
+    button6 = c.GLFW_MOUSE_BUTTON_6,
+    button7 = c.GLFW_MOUSE_BUTTON_7,
+    button8 = c.GLFW_MOUSE_BUTTON_8,
 };
 
-pub const Action = enum(u8) {
+pub const Action = enum(i32) {
     release = c.GLFW_RELEASE,
     press = c.GLFW_PRESS,
     repeat = c.GLFW_REPEAT,
 };
 
-pub const KeyEvent = struct {
-    key: Key,
-    action: Action,
-    scancode: c_int,
-    mods: c_int,
-};
-
-pub const MouseEvent = struct {
-    button: MouseButton,
-    action: Action,
-    mods: c_int,
-};
-
-pub const CursorPosEvent = struct {
-    xpos: f64,
-    ypos: f64,
-};
-
-pub const CharEvent = struct {
-    codepoint: c_int,
-};
-
-pub const EventType = enum(u8) {
-    key,
-    mouse,
-    cursor,
-    char,
-};
-
+pub const EventType = enum { key, mouse, cursor, char, resize, scroll };
 pub const Event = union(EventType) {
-    key: KeyEvent,
-    mouse: MouseEvent,
-    cursor: CursorPosEvent,
-    char: CharEvent,
+    pub const Keyboard = struct { key: Key, action: Action, scancode: c_int, mods: c_int };
+    pub const Mouse = struct { button: MouseButton, action: Action, mods: c_int };
+    pub const Cursor = struct { xpos: f64, ypos: f64 };
+    pub const CharInput = struct { codepoint: c_uint };
+    pub const Resize = struct { width: i32, height: i32 };
+    pub const Scroll = struct { xoffs: f64, yoffs: f64 };
+
+    key: Keyboard,
+    mouse: Mouse,
+    cursor: Cursor,
+    char: CharInput,
+    resize: Resize,
+    scroll: Scroll,
 };
-
-/// input handling for menu state
-fn handle_key_menu(
-    w: *c.GLFWwindow,
-    key: Key,
-    _: KeyMods,
-) void {
-    switch (key) {
-        .escape => {
-            c.glfwSetWindowShouldClose(w, c.GLFW_TRUE);
-        }, // ui.toggle_menu(),
-        .grave_accent => {}, // ui.toggle_console(),
-        .right_bracket => {}, // ui.toggle_metrics(),
-        else => {},
-    }
-}
-
-fn handle_key_game(
-    _: *c.GLFWwindow,
-    key: Key,
-    _: KeyMods,
-) void {
-    switch (key) {
-        else => {},
-    }
-}
