@@ -1,8 +1,7 @@
 const std = @import("std");
 const c = @import("../c.zig");
 const glfw = c.glfw;
-const Shader = @import("../render.zig").Shader;
-// const zt = @import("../zt.zig");
+const Shader = @import("../gl.zig").Shader;
 const gl = c.gl;
 const ig = @import("imgui");
 

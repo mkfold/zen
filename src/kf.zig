@@ -96,7 +96,7 @@ pub fn List(comptime T: type) type {
 }
 
 /// read a file into a buffer and return it. caller must free allocated memory.
-pub fn read_file(allocator: *mem.Allocator, fname: []const u8) ![]const u8 {
+pub fn read_file(allocator: mem.Allocator, fname: []const u8) ![]const u8 {
     const f = try std.fs.cwd().openFile(fname, .{ .read = true });
     defer f.close();
 
@@ -106,44 +106,4 @@ pub fn read_file(allocator: *mem.Allocator, fname: []const u8) ![]const u8 {
 
     _ = try f.reader().readAll(buf);
     return buf;
-}
-
-test "cc.List create, push elements, shrink" {
-    const expect = std.testing.expect;
-
-    var r = std.rand.DefaultPrng.init(123);
-    var static_arr: [100]i8 = undefined;
-
-    for (static_arr) |_, i| {
-        static_arr[i] = r.random.int(i8);
-    }
-
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-
-    var l = List(i8).init(&arena.allocator);
-    defer l.deinit();
-
-    for (static_arr) |e| {
-        try l.push(e);
-    }
-    try expect(l.size == static_arr.len);
-
-    try l.shrink();
-    try expect(l.data.len == static_arr.len);
-
-    for (l.data) |e, i| {
-        try expect(e == static_arr[i]);
-    }
-}
-
-test "gettime" {
-    std.debug.warn("\ngettime() returned {}\n", .{gettime()});
-}
-
-test "read_file" {
-    const alloc = std.heap.page_allocator;
-    var text = try read_file(alloc, "src/cc.zig");
-    defer alloc.free(text);
-    // std.debug.warn("\n{}\n", .{text});
 }

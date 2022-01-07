@@ -3,6 +3,7 @@ const ig = @import("imgui");
 const log = std.log.scoped(.app);
 const logger = @import("../logger.zig");
 const LogItem = logger.LogItem;
+const AppState = @import("../app.zig").State;
 
 // TODO: watch how this is used and see if a FixedBufferAllocator would be better
 var _gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -192,13 +193,13 @@ fn _input_callback(dptr: [*c]ig.ImGuiInputTextCallbackData) callconv(.C) c_int {
     return 0;
 }
 
-pub fn show_console(open: *bool) void {
+pub fn show_console(state: *AppState) void {
     if (log_filter == null) {
         log_filter = ig.ImGuiTextFilter_ImGuiTextFilter("");
     }
     if (true) {
         ig.igSetNextWindowSize(.{ .x = 520, .y = 600 }, ig.ImGuiCond_FirstUseEver);
-        if (!ig.igBegin("Console", open, ig.ImGuiWindowFlags_MenuBar | ig.ImGuiWindowFlags_NoDocking)) {
+        if (!ig.igBegin("Console", &state.*.console_open, ig.ImGuiWindowFlags_MenuBar)) {
             ig.igEnd();
             return;
         }
@@ -232,7 +233,7 @@ pub fn show_console(open: *bool) void {
                 copy_to_clipboard = true;
             }
             if (ig.igMenuItem_Bool("Close", "`", false, true)) {
-                open.* = false;
+                state.*.console_open = false;
             }
             ig.igEndMenu();
         }

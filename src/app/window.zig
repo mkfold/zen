@@ -1,6 +1,5 @@
 const std = @import("std");
 const log = std.log.scoped(.app);
-const ig = @import("imgui");
 
 const input = @import("./input.zig");
 const Event = input.Event;
@@ -21,7 +20,17 @@ pub const GraphicsBackend = enum { opengl, vulkan };
 
 pub const Window = struct {
     pub const Context = struct {
-        inputs: std.ArrayList(input.Event),
+        inputs: std.ArrayList(Event),
+        _key_fns: std.ArrayList(fn (Event.Keyboard) void),
+        _mouse_fns: std.ArrayList(fn (Event.Mouse) void),
+        _cur_fns: std.ArrayList(fn (Event.Cursor) void),
+        _char_fns: std.ArrayList(fn (Event.CharInput) void),
+        _resize_fns: std.ArrayList(fn (Event.Resize) void),
+        _scroll_fns: std.ArrayList(fn (Event.Scroll) void),
+        width: i32,
+        height: i32,
+        cursor_xpos: f32,
+        cursor_ypos: f32,
     };
 
     context: Context,
@@ -30,6 +39,39 @@ pub const Window = struct {
     allocator: std.mem.Allocator,
 
     var backend_initialized = false;
+
+    pub fn add_key_callback(self: *Window, func: fn (Event.Keyboard) void) !void {
+        try self.context._key_fns.append(func);
+    }
+
+    pub fn add_mouse_callback(self: *Window, func: fn (Event.Mouse) void) !void {
+        try self.context._mouse_fns.append(func);
+    }
+
+    pub fn add_cursor_callback(self: *Window, func: fn (Event.Cursor) void) !void {
+        try self.context._cur_fns.append(func);
+    }
+
+    pub fn add_char_input_callback(self: *Window, func: fn (Event.CharInput) void) !void {
+        try self.context._char_fns.append(func);
+    }
+
+    pub fn add_resize_callback(self: *Window, func: fn (Event.Resize) void) !void {
+        try self.context._resize_fns.append(func);
+    }
+
+    pub fn add_scroll_callback(self: *Window, func: fn (Event.Scroll) void) !void {
+        try self.context._scroll_fns.append(func);
+    }
+
+    pub fn reset_callbacks(self: *Window) !void {
+        try self.context._key_fns.resize(0);
+        try self.context._mouse_fns.resize(0);
+        try self.context._cur_fns.resize(0);
+        try self.context._char_fns.resize(0);
+        try self.context._resize_fns.resize(0);
+        try self.context._scroll_fns.resize(0);
+    }
 
     fn _init_backend() !void {
         _ = glfw.glfwSetErrorCallback(glfw_error_callback);
@@ -53,7 +95,13 @@ pub const Window = struct {
         app.window = try create_window(.opengl);
         errdefer glfw.glfwDestroyWindow(app.window);
 
-        app.context.inputs = std.ArrayList(input.Event).init(allocator);
+        app.context.inputs = std.ArrayList(Event).init(allocator);
+        app.context._key_fns = std.ArrayList(fn (Event.Keyboard) void).init(allocator);
+        app.context._mouse_fns = std.ArrayList(fn (Event.Mouse) void).init(allocator);
+        app.context._cur_fns = std.ArrayList(fn (Event.Cursor) void).init(allocator);
+        app.context._char_fns = std.ArrayList(fn (Event.CharInput) void).init(allocator);
+        app.context._resize_fns = std.ArrayList(fn (Event.Resize) void).init(allocator);
+        app.context._scroll_fns = std.ArrayList(fn (Event.Scroll) void).init(allocator);
         app.is_open = true;
         return app;
     }
@@ -61,6 +109,12 @@ pub const Window = struct {
     pub fn deinit(self: *Window) void {
         glfw.glfwDestroyWindow(self.window);
         self.context.inputs.deinit();
+        self.context._key_fns.deinit();
+        self.context._mouse_fns.deinit();
+        self.context._cur_fns.deinit();
+        self.context._char_fns.deinit();
+        self.context._resize_fns.deinit();
+        self.context._scroll_fns.deinit();
         _deinit_backend();
     }
 
@@ -70,7 +124,8 @@ pub const Window = struct {
         var width: c_int = 0;
         var height: c_int = 0;
         glfw.glfwGetWindowSize(self.window, &width, &height);
-        gl.glViewport(0, 0, width, height);
+        self.context.width = @intCast(i32, width);
+        self.context.height = @intCast(i32, height);
         _ = glfw.glfwSetWindowUserPointer(self.window, &self.context);
         _ = glfw.glfwSetKeyCallback(self.window, _key_callback);
         _ = glfw.glfwSetMouseButtonCallback(self.window, _mouse_button_callback);
@@ -89,13 +144,20 @@ pub const Window = struct {
             self.is_open = false;
             return;
         }
-        gl.glClear(gl.GL_COLOR_BUFFER_BIT);
     }
 
     pub fn end(self: *Window) !void {
         glfw.glfwSwapBuffers(self.window);
         self.context.inputs.clearRetainingCapacity();
         if (!self.is_open) glfw.glfwSetWindowShouldClose(self.window, 1);
+    }
+
+    pub fn set_mouse_capture(self: *Window, enabled: bool) void {
+        glfw.glfwSetInputMode(
+            self.window,
+            glfw.GLFW_CURSOR,
+            if (enabled) glfw.GLFW_CURSOR_NORMAL else glfw.GLFW_CURSOR_DISABLED,
+        );
     }
 };
 
@@ -111,7 +173,7 @@ fn create_window(backend: GraphicsBackend) !*glfw.GLFWwindow {
             glfw.glfwWindowHint(glfw.GLFW_CLIENT_API, glfw.GLFW_NO_API);
         },
     }
-    glfw.glfwWindowHint(glfw.GLFW_RESIZABLE, glfw.GLFW_FALSE);
+    glfw.glfwWindowHint(glfw.GLFW_RESIZABLE, glfw.GLFW_TRUE);
     glfw.glfwWindowHint(glfw.GLFW_DOUBLEBUFFER, glfw.GLFW_TRUE);
 
     // obtain the dimensions of the primary display to create "windowed fullscreen" context
@@ -128,7 +190,7 @@ fn create_window(backend: GraphicsBackend) !*glfw.GLFWwindow {
         mode.*.width,
         mode.*.height,
         "zen",
-        monitor,
+        null, // monitor,
         null,
     ) orelse Error.GlfwWindowCreationFailed;
 }
@@ -153,20 +215,33 @@ fn _key_callback(
     mods: c_int,
 ) callconv(.C) void {
     if (key == -1 or window == null) return;
-    const ctx = _get_window_context(window.?);
-    ctx.*.inputs.append(.{ .key = .{
+    const e = Event.Keyboard{
         .key = @intToEnum(input.Key, key),
         .mods = mods,
         .scancode = scancode,
         .action = @intToEnum(input.Action, action),
-    } }) catch unreachable;
+    };
+    const ctx = _get_window_context(window.?);
+
+    for (ctx.*._key_fns.items) |func| func(e);
 }
 
 fn _cursor_pos_callback(window: ?*glfw.GLFWwindow, xpos: f64, ypos: f64) callconv(.C) void {
     const ctx = _get_window_context(window.?);
-    var io = ig.igGetIO();
-    io.*.MousePos = .{ .x = @floatCast(f32, xpos), .y = @floatCast(f32, ypos) };
-    ctx.*.inputs.append(.{ .cursor = .{ .xpos = xpos, .ypos = ypos } }) catch unreachable;
+    const new_xpos = @floatCast(f32, xpos);
+    const new_ypos = @floatCast(f32, ypos);
+
+    const e = Event.Cursor{
+        .xpos = new_xpos,
+        .ypos = new_ypos,
+        .dx = ctx.*.cursor_xpos - new_xpos,
+        .dy = ctx.*.cursor_ypos - new_ypos,
+    };
+
+    for (ctx.*._cur_fns.items) |func| func(e);
+
+    ctx.*.cursor_xpos = new_xpos;
+    ctx.*.cursor_ypos = new_ypos;
 }
 
 fn _mouse_button_callback(
@@ -175,27 +250,33 @@ fn _mouse_button_callback(
     action: c_int,
     mods: c_int,
 ) callconv(.C) void {
-    const ctx = _get_window_context(window.?);
-    ctx.*.inputs.append(.{ .mouse = .{
+    const e = Event.Mouse{
         .button = @intToEnum(input.MouseButton, button),
         .action = @intToEnum(input.Action, action),
         .mods = mods,
-    } }) catch unreachable;
+    };
+    const ctx = _get_window_context(window.?);
+    for (ctx.*._mouse_fns.items) |func| func(e);
 }
 
 fn _char_input_callback(window: ?*glfw.GLFWwindow, codepoint: c_uint) callconv(.C) void {
+    const e = Event.CharInput{ .codepoint = codepoint };
     const ctx = _get_window_context(window.?);
-    ctx.*.inputs.append(.{ .char = .{ .codepoint = codepoint } }) catch unreachable;
+    for (ctx.*._char_fns.items) |func| func(e);
 }
 
 fn _fb_size_callback(window: ?*glfw.GLFWwindow, width: c_int, height: c_int) callconv(.C) void {
     const ctx = _get_window_context(window.?);
-    ctx.*.inputs.append(.{ .resize = .{ .width = width, .height = height } }) catch unreachable;
+    ctx.*.width = @intCast(i32, width);
+    ctx.*.height = @intCast(i32, height);
+    const e = Event.Resize{ .width = width, .height = height };
+    for (ctx.*._resize_fns.items) |func| func(e);
 }
 
 fn _scroll_callback(window: ?*glfw.GLFWwindow, xoffs: f64, yoffs: f64) callconv(.C) void {
     const ctx = _get_window_context(window.?);
-    ctx.*.inputs.append(.{ .scroll = .{ .xoffs = xoffs, .yoffs = yoffs } }) catch unreachable;
+    const e = Event.Scroll{ .xoffs = xoffs, .yoffs = yoffs };
+    for (ctx.*._scroll_fns.items) |func| func(e);
 }
 
 /// GLFW error callback function. more robust error handling may follow if necessary.

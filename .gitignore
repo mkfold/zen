@@ -1,5 +1,6 @@
 zig-cache/
 assets/
 test/
-
+_scratch/
 .*.swp
+.*.swo

@@ -15,9 +15,17 @@ const abs = math.absFloat;
 pub const real = f32;
 
 const matmul_block_size: usize = sqrt(65536 / @sizeOf(real));
-const rads_per_degree: real = math.pi / 180.0;
-const degrees_per_rad: real = 180.0 / math.pi;
+pub const rads_per_degree: real = math.pi / 180.0;
+pub const degrees_per_rad: real = 180.0 / math.pi;
 const Index = u5;
+
+pub fn to_radians(degrees: real) real {
+    return degrees * rads_per_degree;
+}
+
+pub fn to_degrees(radians: real) real {
+    return radians * degrees_per_rad;
+}
 
 // "officially-supported" types
 // this was designed for 3D graphics, after all ;)
@@ -521,10 +529,10 @@ pub fn lookat(pos: Vec3, dir: Vec3, up: Vec3) Mat4 {
 }
 
 pub fn fpslook(pos: Vec3, theta: Vec3) Mat4 {
-    var look = rotate3d_euler(theta.x, theta.y, theta.z);
-    look.data[12] = -pos.x;
-    look.data[13] = -pos.y;
-    look.data[14] = -pos.z;
+    var look = rotate3d_euler(theta.data[0], theta.data[1], theta.data[2]);
+    look.data[12] = -pos.data[0];
+    look.data[13] = -pos.data[1];
+    look.data[14] = -pos.data[2];
     look.data[15] = 1.0;
     return look;
 }
@@ -614,6 +622,7 @@ pub const Quat = struct {
 };
 
 /// axis-aligned bounding boxes
+/// TODO: change to min/max rep
 pub const AABB = struct {
     pos: Vec3, // position of center of box
     dim: Vec3, // distance of each axis-aligned pair of faces from center
@@ -635,8 +644,8 @@ pub const Plane = struct {
         if (d == 0.0) return null; // parallel, no intersection
 
         p = p.muls(-a.dist);
-        p = p.sub(cross(c.normal, a.normal).muls(b.dist));
-        p = p.sub(cross(a.normal, b.normal).muls(c.dist));
+        p = p.sub(cross(c.norm, a.norm).muls(b.dist));
+        p = p.sub(cross(a.norm, b.norm).muls(c.dist));
         return p.divs(d);
     }
 };

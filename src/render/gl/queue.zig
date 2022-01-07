@@ -20,9 +20,9 @@ pub fn Batcher(comptime T: type) type {
         voffs: usize = 0,
         eoffs: usize = 0,
 
-        allocator: *std.mem.Allocator,
+        allocator: std.mem.Allocator,
 
-        pub fn init(allocator: *std.mem.Allocator, vertex_buf_size: usize) !Self {
+        pub fn init(allocator: std.mem.Allocator, vertex_buf_size: usize) !Self {
             var self: Self = undefined;
 
             self.vertices = try allocator.alloc(T, vertex_buf_size);
@@ -95,6 +95,16 @@ pub fn Batcher(comptime T: type) type {
     };
 }
 
+const Drawable = struct {
+    const Type = enum {
+        mesh,
+    };
+
+    buffer_obj: c_uint,
+    shader_id: c_uint,
+    texture_id: c_uint,
+};
+
 // queued batched rendering procedure:
 // 1) for everything but gui, determine geometry visible from current view
 // 2) queue visible geometry
@@ -102,46 +112,43 @@ pub fn Batcher(comptime T: type) type {
 // 4) set uniforms for camera, etc.
 // 5) split into batches and draw
 
-pub fn RenderQueue(comptime T: type) type {
-    return struct {
-        const Self = @This();
+pub const RenderQueue = struct {
+    const Self = @This();
 
-        queue: []T,
-        // batcher: Batcher(...),
-        allocator: *std.mem.Allocator,
+    queue: std.ArrayList(Drawable),
 
-        pub fn init(allocator: *std.mem.Allocator) RenderQueue(T) {
-            return Self{ .queue = std.ArrayList(T).init(allocator) };
+    pub fn init(allocator: std.mem.Allocator) Self {
+        return Self{ .queue = std.ArrayList(Drawable).init(allocator) };
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.queue.deinit();
+    }
+
+    pub fn push(self: Self, drawable: Drawable) !void {
+        try self.queue.append(drawable);
+    }
+
+    pub fn draw(self: *Self) !void {
+        // batcher.bind();
+        // var vertex_offset: u32 = 0;
+        // var index_offset: u32 = 0;
+        for (self.queue.items) |drawable| {
+            // if (vertex_offset > batcher.buf_len or index_offset > batcher.buf_len * 3) {
+            // draw and reset
+            //     self.draw();
+            //    vertex_offset = 0;
+            //    index_offset = 0;
+            //}
+            _ = drawable;
+            // add mesh vertices and indices to batch buffer
+            //self.batcher.add(mesh.vertices, mesh.indices, vertex_offset, index_offset,);
         }
+        //  empty the queue
+        self.clear();
+    }
 
-        pub fn deinit(self: *Self) void {
-            self.queue.deinit();
-        }
-
-        // pub fn push(self: Self, mesh: T) !void {
-        //
-        // }
-
-        pub fn draw(self: *Self) !void {
-            // batcher.bind();
-            var vertex_offset: u32 = 0;
-            var index_offset: u32 = 0;
-            for (self.queue.items) |_| {
-                // if (vertex_offset > batcher.buf_len or index_offset > batcher.buf_len * 3) {
-                // draw and reset
-                // batcher.draw();
-                vertex_offset = 0;
-                index_offset = 0;
-                //}
-
-                // add mesh vertices and indices to batch buffer
-                // self.batcher.add(mesh.vertices, mesh.indices, vertex_offset, index_offset);
-            }
-            //  empty the queue
-        }
-
-        pub fn clear(self: *Self) void {
-            self.queue.clearRetainingCapacity();
-        }
-    };
-}
+    pub fn clear(self: *Self) void {
+        self.queue.clearRetainingCapacity();
+    }
+};

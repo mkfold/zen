@@ -1,6 +1,5 @@
 const std = @import("std");
 const ig = @import("imgui");
-const show_console = @import("./console.zig").show_console;
 const State = @import("../app.zig").State;
 
 var demo_open: bool = false;
@@ -10,7 +9,7 @@ pub fn show_menu(state: *State) void {
     if (ig.igBegin(
         "Main",
         null,
-        ig.ImGuiWindowFlags_NoBackground | ig.ImGuiWindowFlags_NoMove | ig.ImGuiWindowFlags_NoResize | ig.ImGuiWindowFlags_NoTitleBar | ig.ImGuiWindowFlags_NoDocking,
+        ig.ImGuiWindowFlags_NoBackground | ig.ImGuiWindowFlags_NoMove | ig.ImGuiWindowFlags_NoDecoration,
     )) {
         var io = ig.igGetIO();
         ig.igSetWindowPos_Vec2(.{ .x = (io.*.DisplaySize.x / 2) - 100.0, .y = (io.*.DisplaySize.y / 2) - 100.0 }, ig.ImGuiCond_Always);
@@ -32,14 +31,14 @@ pub fn show_menu(state: *State) void {
     }
     ig.igEnd();
 
-    if (state.*.console_open) show_console(&state.*.console_open);
     if (state.*.options_open) show_options(&state.*.options_open);
     if (demo_open) ig.igShowDemoWindow(&demo_open);
 }
 
 var corner: i32 = 1;
 
-pub fn show_metrics(open: *bool) void {
+pub fn show_metrics(state: *State) void {
+    if (!state.*.metrics_open) return;
     const DISTANCE: f32 = 32.0;
     var io = ig.igGetIO();
     if (corner != -1) {
@@ -57,8 +56,8 @@ pub fn show_metrics(open: *bool) void {
     ig.igPushStyleColor_Vec4(ig.ImGuiCol_Border, .{ .x = 0, .y = 0, .z = 0, .w = 0 });
     if (ig.igBegin(
         "Metrics",
-        @ptrCast([*c]bool, open),
-        (if (corner != -1) ig.ImGuiWindowFlags_NoMove else 0) | ig.ImGuiWindowFlags_NoDecoration | ig.ImGuiWindowFlags_AlwaysAutoResize | ig.ImGuiWindowFlags_NoSavedSettings | ig.ImGuiWindowFlags_NoFocusOnAppearing | ig.ImGuiWindowFlags_NoNav | ig.ImGuiWindowFlags_NoBringToFrontOnFocus | ig.ImGuiWindowFlags_NoDocking,
+        @ptrCast([*c]bool, &state.*.metrics_open),
+        (if (corner != -1) ig.ImGuiWindowFlags_NoMove else 0) | ig.ImGuiWindowFlags_NoDecoration | ig.ImGuiWindowFlags_AlwaysAutoResize | ig.ImGuiWindowFlags_NoSavedSettings | ig.ImGuiWindowFlags_NoFocusOnAppearing | ig.ImGuiWindowFlags_NoNav | ig.ImGuiWindowFlags_NoBringToFrontOnFocus,
     )) {
         ig.igText("%s", "zen alpha");
         ig.igTextColored(.{ .x = 1.0, .y = 0.0, .z = 0.0, .w = 1.0 }, "debug build");
@@ -72,6 +71,34 @@ pub fn show_metrics(open: *bool) void {
             @ptrCast([*c]const u8, fstr.ptr),
             @ptrCast([*c]const u8, fstr.ptr + fstr.len),
         );
+        {
+            const pstr = blk: {
+                const camera_pos = state.*.camera_pos;
+                break :blk std.fmt.bufPrintZ(
+                    tmp[0..],
+                    "camera_pos: {d:.3} {d:.3} {d:.3}",
+                    .{ camera_pos.data[0], camera_pos.data[1], camera_pos.data[2] },
+                ) catch unreachable;
+            };
+            ig.igTextUnformatted(
+                @ptrCast([*c]const u8, pstr.ptr),
+                @ptrCast([*c]const u8, pstr.ptr + pstr.len),
+            );
+        }
+        {
+            const pstr = blk: {
+                const camera_dir = state.*.camera_ypr;
+                break :blk std.fmt.bufPrintZ(
+                    tmp[0..],
+                    "camera_dir: {d:.3} {d:.3} {d:.3}",
+                    .{ camera_dir.data[0], camera_dir.data[1], camera_dir.data[2] },
+                ) catch unreachable;
+            };
+            ig.igTextUnformatted(
+                @ptrCast([*c]const u8, pstr.ptr),
+                @ptrCast([*c]const u8, pstr.ptr + pstr.len),
+            );
+        }
 
         if (ig.igBeginPopupContextWindow("##metrics", 0)) {
             if (ig.igMenuItem_Bool("Custom", null, corner == -1, true)) corner = -1;
@@ -79,7 +106,7 @@ pub fn show_metrics(open: *bool) void {
             if (ig.igMenuItem_Bool("Top-right", null, corner == 1, true)) corner = 1;
             if (ig.igMenuItem_Bool("Bottom-left", null, corner == 2, true)) corner = 2;
             if (ig.igMenuItem_Bool("Bottom-right", null, corner == 3, true)) corner = 3;
-            if (ig.igMenuItem_BoolPtr("Close", null, null, true)) open.* = false;
+            if (ig.igMenuItem_BoolPtr("Close", null, null, true)) state.*.metrics_open = false;
             ig.igEndPopup();
         }
     }
@@ -88,7 +115,7 @@ pub fn show_metrics(open: *bool) void {
 }
 
 pub fn show_options(open: *bool) void {
-    if (ig.igBegin("Options", @ptrCast([*c]bool, open), ig.ImGuiWindowFlags_NoDocking)) {
+    if (ig.igBegin("Options", @ptrCast([*c]bool, open), 0)) {
         if (ig.igBeginTabBar("OptionsTabs", ig.ImGuiTabBarFlags_None)) {
             if (ig.igBeginTabItem("Controls", null, 0)) {
                 ig.igEndTabItem();
